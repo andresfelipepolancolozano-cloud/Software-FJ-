@@ -1,10 +1,12 @@
 import sys, os, re
+# Agrega la carpeta del archivo al path para que Python encuentre los módulos locales
 sys.path.insert(0, os.path.dirname(__file__))
 
 import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
 
+# Módulos propios del sistema Software FJ
 from sistema import GestorSistema
 from servicios import ReservaSala, AlquilerEquipo, Asesoria
 from reserva import EstadoReserva
@@ -14,6 +16,8 @@ from logger import log
 
 # PALETA Y FUENTES
 
+# Diccionario con los dos temas de color disponibles: oscuro y claro.
+# Cada tema define colores para fondo, paneles, tarjetas, texto, acentos y estados de reserva.
 TEMAS = {
     "oscuro": {
         "BG":      "#0d1117", "PANEL":   "#161b22", "CARD":    "#1c2330",
@@ -46,6 +50,7 @@ TEMAS = {
 _MODO_ACTUAL = "oscuro"
 
 def _cargar_tema(modo):
+    # Carga el tema seleccionado en variables globales para que toda la UI las use
     global BG, PANEL, CARD, BORDER, TEXT, TEXT_DIM
     global ACCENT, ACCENT2, WARN, AMBER, NAV_HOV, ESTADO_TAG, _MODO_ACTUAL
     t = TEMAS[modo]; _MODO_ACTUAL = modo
@@ -54,18 +59,22 @@ def _cargar_tema(modo):
     ACCENT=t["ACCENT"]; ACCENT2=t["ACCENT2"]; WARN=t["WARN"]; AMBER=t["AMBER"]
     NAV_HOV=t["NAV_HOV"]; ESTADO_TAG=t["ESTADO_TAG"]
 
+# Aplica el tema oscuro al arrancar
 _cargar_tema("oscuro")
 
-F_H1   = ("Segoe UI", 18, "bold")
-F_H2   = ("Segoe UI", 13, "bold")
-F_BODY = ("Segoe UI",  10)
-F_SM   = ("Segoe UI",   9)
-F_MONO = ("Consolas",  10)
+# Constantes de fuente usadas en toda la interfaz
+F_H1   = ("Segoe UI", 18, "bold")  # Títulos de panel
+F_H2   = ("Segoe UI", 13, "bold")  # Subtítulos
+F_BODY = ("Segoe UI",  10)         # Texto general
+F_SM   = ("Segoe UI",   9)         # Texto pequeño
+F_MONO = ("Consolas",  10)         # Texto monoespaciado (no usado visualmente, reservado)
 
+# Expresiones regulares para validar campos de entrada
 _RE_ID    = re.compile(r"^[A-Za-z0-9\-]{3,20}$")
 _RE_EMAIL = re.compile(r"^[\w\.\+\-]+@[\w\-]+\.[a-zA-Z]{2,}$")
 _RE_TEL   = re.compile(r"^\+?[\d\s\-\(\)]{7,20}$")
 
+# Funciones de validación individuales; lanzan ValueError si el valor no cumple la regla
 def _val_id(v):
     if not _RE_ID.match(v): raise ValueError()
 
@@ -87,32 +96,40 @@ def _val_horas(v):
 
 
 class PillButton(tk.Frame):
+    """Botón con apariencia de píldora, efecto hover y cursor de mano."""
+
     def __init__(self, parent, text="", command=None,
                  bg=ACCENT, fg="white", w=130, h=32, font=F_BODY, **kw):
         super().__init__(parent, bg=BG, width=w, height=h, cursor="hand2")
         self.pack_propagate(False)
         self._bg = bg; self._cmd = command
+        # Frame interior que recibe el color de fondo real del botón
         self._inner = tk.Frame(self, bg=bg, cursor="hand2")
         self._inner.place(relx=0, rely=0, relwidth=1, relheight=1)
         self._lbl = tk.Label(self._inner, text=text, font=font, bg=bg, fg=fg, cursor="hand2")
         self._lbl.place(relx=.5, rely=.5, anchor="center")
+        # Enlaza los eventos en el frame, el inner y el label para que el hover sea consistente
         for w_ in (self, self._inner, self._lbl):
             w_.bind("<Enter>",    self._enter)
             w_.bind("<Leave>",    self._leave)
             w_.bind("<Button-1>", self._click)
 
     def _enter(self, _=None):
+        # Aclara el color al pasar el mouse por encima
         c = self._lighten(self._bg)
         self._inner.config(bg=c); self._lbl.config(bg=c)
 
     def _leave(self, _=None):
+        # Restaura el color original al salir el mouse
         self._inner.config(bg=self._bg); self._lbl.config(bg=self._bg)
 
     def _click(self, _=None):
+        # Ejecuta la función asignada al hacer clic
         if self._cmd: self._cmd()
 
     @staticmethod
     def _lighten(h):
+        # Suma 25 a cada canal RGB del color hexadecimal para aclararlo
         r = min(255, int(h[1:3],16)+25)
         g = min(255, int(h[3:5],16)+25)
         b = min(255, int(h[5:7],16)+25)
@@ -120,11 +137,12 @@ class PillButton(tk.Frame):
 
 
 class StyledEntry(tk.Frame):
-    """Entry estilizado. Con validador activa borde verde/rojo en tiempo real (mejora 13)."""
+    """Campo de texto estilizado con placeholder y validación visual en tiempo real."""
 
     def __init__(self, parent, placeholder="", width=18, validador=None, **kw):
         super().__init__(parent, bg=BG)
         self._ph = placeholder; self._active = False; self._validador = validador
+        # Frame exterior que simula el borde del campo
         self._wrap = tk.Frame(self, bg=BORDER, padx=1, pady=1)
         self._wrap.pack(fill="x")
         inner = tk.Frame(self._wrap, bg=CARD); inner.pack(fill="x")
@@ -138,13 +156,16 @@ class StyledEntry(tk.Frame):
             self._e.bind("<FocusIn>",  self._clear)
             self._e.bind("<FocusOut>", self._restore)
         if validador:
+            # Activa la validación visual cada vez que el usuario escribe o sale del campo
             self._e.bind("<KeyRelease>", self._validar_live, add="+")
             self._e.bind("<FocusOut>",   self._validar_live, add="+")
 
     def set_borde(self, color=BORDER):
+        # Cambia el color del borde exterior del campo
         self._wrap.config(bg=color)
 
     def _validar_live(self, _=None):
+        # Pinta el borde verde si el valor es válido, rojo si no
         if self._active or not self._validador: return
         valor = self.var.get().strip()
         if not valor:
@@ -155,25 +176,33 @@ class StyledEntry(tk.Frame):
             self.set_borde(WARN)
 
     def _set_ph(self):
+        # Muestra el placeholder en gris
         self.var.set(self._ph); self._e.config(fg=TEXT_DIM); self._active = True
 
     def _clear(self, _=None):
+        # Borra el placeholder al hacer foco
         if self._active: self.var.set(""); self._e.config(fg=TEXT); self._active = False
 
     def _restore(self, _=None):
+        # Restaura el placeholder si el campo quedó vacío
         if not self.var.get(): self._set_ph()
 
     def get(self):
+        # Devuelve el texto real; cadena vacía si el placeholder está activo
         return "" if self._active else self.var.get().strip()
 
     def set(self, v):
+        # Asigna un valor al campo y desactiva el placeholder
         self.var.set(v); self._e.config(fg=TEXT); self._active = False
 
     def clear(self):
+        # Vacía el campo y restaura el placeholder y el borde por defecto
         self.var.set(""); self._set_ph(); self.set_borde(BORDER)
 
 
 class StyledCombo(tk.Frame):
+    """Combobox (lista desplegable) estilizado con borde simulado."""
+
     def __init__(self, parent, values=None, width=17, **kw):
         super().__init__(parent, bg=BG)
         wrap = tk.Frame(self, bg=BORDER, padx=1, pady=1); wrap.pack(fill="x")
@@ -190,28 +219,34 @@ class StyledCombo(tk.Frame):
 
 
 def lbl(parent, text, font=F_SM, fg=None, bg=None, **kw):
+    """Crea y devuelve un Label con los colores del tema aplicados por defecto."""
     return tk.Label(parent, text=text, font=font,
                     fg=fg if fg is not None else TEXT_DIM,
                     bg=bg if bg is not None else CARD, **kw)
 
 
 def separador(parent, bg=CARD):
+    """Inserta una línea horizontal de 1px como separador visual."""
     tk.Frame(parent, bg=BORDER, height=1).pack(fill="x", pady=(6,10))
 
 
 def mini_chart(n, maximo=8):
+    """Devuelve una barra de texto Unicode proporcional al valor n sobre el máximo."""
     filled = min(n, maximo)
     return "█" * filled + "░" * (maximo - filled) + f"  {n}"
 
 
 
 def toast(root, msg, error=False):
+    """Muestra una notificación flotante temporal en la parte inferior de la ventana.
+    Verde para éxito, rojo para error. Se destruye automáticamente a los 3.2 segundos."""
     color = WARN if error else ACCENT2
     t = tk.Toplevel(root)
     t.overrideredirect(True); t.attributes("-topmost", True)
     frm = tk.Frame(t, bg=color, padx=18, pady=10); frm.pack()
     tk.Label(frm, text=msg, font=F_BODY, bg=color, fg="white", wraplength=420).pack()
     t.update_idletasks()
+    # Centra el toast horizontalmente en la ventana principal
     rx = root.winfo_x() + root.winfo_width()//2
     ry = root.winfo_y() + root.winfo_height() - 80
     t.geometry(f"+{rx - t.winfo_width()//2}+{ry}")
@@ -220,7 +255,8 @@ def toast(root, msg, error=False):
 
 
 class ConfirmarDialog(tk.Toplevel):
- 
+    """Ventana modal de confirmación con botones 'Cancelar' y 'Sí, confirmar'.
+    Bloquea la ventana principal hasta que el usuario responda."""
 
     def __init__(self, root, titulo, mensaje, color_btn=None):
         super().__init__(root)
@@ -228,7 +264,7 @@ class ConfirmarDialog(tk.Toplevel):
         self.resizable(False, False)
         self.configure(bg=BG)
         self.attributes("-topmost", True)
-        self.grab_set()
+        self.grab_set()  # Bloquea interacción con la ventana padre
         self._resultado = False
 
         w, h = 360, 180
@@ -237,7 +273,7 @@ class ConfirmarDialog(tk.Toplevel):
         self.geometry(f"{w}x{h}+{rx}+{ry}")
 
         color_acento = color_btn or WARN
-        tk.Frame(self, bg=color_acento, height=3).pack(fill="x")
+        tk.Frame(self, bg=color_acento, height=3).pack(fill="x")  # Franja de color superior
 
         body = tk.Frame(self, bg=BG, padx=28, pady=20); body.pack(fill="both", expand=True)
 
@@ -252,29 +288,32 @@ class ConfirmarDialog(tk.Toplevel):
         PillButton(btns, "Sí, confirmar", self._si,
                    bg=color_acento, w=120, h=30, font=F_SM).pack(side="left")
 
+        # Atajos de teclado: Enter confirma, Escape cancela
         self.bind("<Return>", lambda _: self._si())
         self.bind("<Escape>", lambda _: self._no())
-        self.wait_window()
+        self.wait_window()  # Espera hasta que la ventana se cierre
 
     def _si(self):  self._resultado = True;  self.destroy()
     def _no(self):  self._resultado = False; self.destroy()
 
     @property
-    def confirmado(self): return self._resultado
-
+    def confirmado(self): return self._resultado  # True si el usuario confirmó
 
 
 class Tooltip:
+    """Muestra un recuadro emergente con información detallada al pasar el mouse
+    sobre una fila del Treeview."""
 
     def __init__(self, tree, fn_info):
         self._tree  = tree
-        self._fn    = fn_info   
-        self._win   = None
-        self._fila  = None
+        self._fn    = fn_info   # Función que recibe el ID de la fila y devuelve un dict de datos
+        self._win   = None      # Referencia a la ventana del tooltip activo
+        self._fila  = None      # ID de la última fila detectada
         tree.bind("<Motion>", self._on_motion, add="+")
         tree.bind("<Leave>",  self._ocultar,   add="+")
 
     def _on_motion(self, event):
+        # Detecta sobre qué fila está el cursor y mueve o recrea el tooltip
         fila = self._tree.identify_row(event.y)
         if fila == self._fila:
             if self._win and self._win.winfo_exists():
@@ -287,11 +326,12 @@ class Tooltip:
         if not fila: return
         vals = self._tree.item(fila, "values")
         if not vals: return
-        info = self._fn(str(vals[0]))
+        info = self._fn(str(vals[0]))  # Obtiene los datos usando el primer valor (ID) de la fila
         if not info: return
         self._mostrar(event, info)
 
     def _mostrar(self, event, info):
+        # Crea la ventana del tooltip con cada clave y valor del dict
         x = self._tree.winfo_rootx() + event.x + 18
         y = self._tree.winfo_rooty() + event.y + 10
         self._win = tk.Toplevel(self._tree)
@@ -308,6 +348,7 @@ class Tooltip:
         self._win.geometry(f"+{x}+{y}")
 
     def _ocultar(self, _=None):
+        # Destruye el tooltip actual y resetea el estado
         self._fila = None
         if self._win:
             try: self._win.destroy()
@@ -315,8 +356,9 @@ class Tooltip:
             self._win = None
 
 
-
 class VentanaDetalle(tk.Toplevel):
+    """Ventana secundaria que muestra el detalle completo de un registro
+    (cliente, servicio o reserva) y opcionalmente botones de acción."""
 
     def __init__(self, root, titulo, info, acciones=None):
         super().__init__(root)
@@ -324,6 +366,7 @@ class VentanaDetalle(tk.Toplevel):
         self.configure(bg=BG)
         self.resizable(False, False)
         self.attributes("-topmost", True)
+        # Altura dinámica según la cantidad de campos y acciones
         alto = 130 + len(info) * 30 + len(acciones or []) * 46
         w, h = 430, min(alto, 560)
         rx = root.winfo_x() + root.winfo_width()//2  - w//2
@@ -337,6 +380,7 @@ class VentanaDetalle(tk.Toplevel):
         cw.pack(fill="x", padx=24, pady=12)
         card = tk.Frame(cw, bg=CARD, padx=20, pady=14); card.pack(fill="x")
 
+        # Muestra cada par clave-valor del dict info en una fila separada
         for clave, valor in info.items():
             f = tk.Frame(card, bg=CARD); f.pack(fill="x", pady=2)
             tk.Label(f, text=clave, font=("Segoe UI",9),
@@ -348,6 +392,7 @@ class VentanaDetalle(tk.Toplevel):
             af = tk.Frame(self, bg=BG); af.pack(fill="x", padx=24, pady=(0,6))
             for texto, fn, color in acciones:
                 def hacer(f=fn):
+                    # Ejecuta la acción y muestra un toast si hay error
                     try: f()
                     except SoftwareFJError as ex:
                         toast(root, str(ex), error=True)
@@ -357,9 +402,11 @@ class VentanaDetalle(tk.Toplevel):
         PillButton(self, "✕  Cerrar", self.destroy, bg="#444c56", w=100, h=28, font=F_SM).pack(pady=(4,16))
 
 
-
 def hacer_tabla(parent, titulo, cols, anchos, altura=14, fn_tooltip=None):
-  
+    """Construye un Treeview estilizado con cabecera, barra de búsqueda y scrollbar.
+    Devuelve (tree, badge, lbl_vacio, var_busqueda)."""
+
+    # Cabecera con título y contador (badge) de registros visibles
     cabecera = tk.Frame(parent, bg=CARD)
     cabecera.pack(fill="x", padx=16, pady=(14,4))
     tk.Label(cabecera, text=titulo, font=("Segoe UI",10,"bold"),
@@ -370,6 +417,7 @@ def hacer_tabla(parent, titulo, cols, anchos, altura=14, fn_tooltip=None):
 
     tk.Frame(parent, bg=BORDER, height=1).pack(fill="x", padx=12)
 
+    # Barra de búsqueda en tiempo real
     barra = tk.Frame(parent, bg=CARD); barra.pack(fill="x", padx=12, pady=(8,2))
     tk.Label(barra, text="🔍", bg=CARD, fg=TEXT_DIM, font=F_SM).pack(side="left", padx=(0,4))
     var_busqueda = tk.StringVar()
@@ -377,6 +425,7 @@ def hacer_tabla(parent, titulo, cols, anchos, altura=14, fn_tooltip=None):
              insertbackground=ACCENT, relief="flat",
              font=F_SM, bd=4).pack(side="left", fill="x", expand=True)
 
+    # Estilo personalizado para el Treeview
     style = ttk.Style()
     style.theme_use("clam")
     style.configure("FJ.Treeview", background=CARD, foreground=TEXT,
@@ -392,9 +441,10 @@ def hacer_tabla(parent, titulo, cols, anchos, altura=14, fn_tooltip=None):
         tree.heading(c, text=c); tree.column(c, width=w, anchor="w")
 
     tree.tag_configure("hover", background="#252e3f")
-    _ul = [None]
+    _ul = [None]  # Lista de un elemento usada como referencia mutable a la última fila hover
 
     def _mot(event):
+        # Aplica el tag hover a la fila bajo el cursor
         f = tree.identify_row(event.y)
         if f == _ul[0]: return
         if _ul[0]:
@@ -404,6 +454,7 @@ def hacer_tabla(parent, titulo, cols, anchos, altura=14, fn_tooltip=None):
         _ul[0] = f
 
     def _lv(event):
+        # Quita el hover cuando el mouse sale del Treeview
         if _ul[0]:
             tree.item(_ul[0], tags=[t for t in tree.item(_ul[0],"tags") if t != "hover"])
         _ul[0] = None
@@ -411,11 +462,13 @@ def hacer_tabla(parent, titulo, cols, anchos, altura=14, fn_tooltip=None):
     tree.bind("<Motion>", _mot)
     tree.bind("<Leave>",  _lv)
 
+    # Scrollbar vertical vinculada al Treeview
     sb = ttk.Scrollbar(ct, orient="vertical", command=tree.yview)
     tree.configure(yscrollcommand=sb.set)
     tree.pack(side="left", fill="both", expand=True, padx=(12,0), pady=8)
     sb.pack(side="right", fill="y", pady=8)
 
+    # Etiqueta que aparece cuando no hay registros
     lbl_vacio = tk.Label(parent, text="Sin registros aún",
                          font=("Segoe UI",10,"italic"), bg=CARD, fg=TEXT_DIM)
 
@@ -426,22 +479,25 @@ def hacer_tabla(parent, titulo, cols, anchos, altura=14, fn_tooltip=None):
 
 
 def sync_badge(tree, badge, vacio):
+    """Actualiza el contador del badge y muestra u oculta el mensaje de 'Sin registros'."""
     n = len(tree.get_children())
     badge.config(text=str(n))
     if n == 0: vacio.pack(pady=20)
     else:      vacio.pack_forget()
 
 
-
 class PanelClientes(tk.Frame):
+    """Panel de la pestaña Clientes: formulario de registro a la izquierda
+    y tabla de clientes registrados a la derecha."""
+
     def __init__(self, parent, gestor: GestorSistema, root):
         super().__init__(parent, bg=BG)
         self.gestor = gestor; self.root = root
-        self._datos = []
+        self._datos = []  # Lista local con los datos cargados del gestor
         self._construir()
 
     def _info_tooltip(self, id_val):
-        """Mejora 8 — info para tooltip de clientes."""
+        """Devuelve un dict con los datos del cliente para el tooltip."""
         try:
             c = self.gestor.obtener_cliente(id_val)
             n_reservas = len(self.gestor.listar_reservas(id_cliente=id_val))
@@ -458,7 +514,7 @@ class PanelClientes(tk.Frame):
         except: return None
 
     def _abrir_detalle(self, event):
-        """Mejora 9 — ventana de detalle con doble clic."""
+        """Abre VentanaDetalle al hacer doble clic sobre una fila del Treeview."""
         sel = self.tree.selection()
         if not sel: return
         id_val = str(self.tree.item(sel[0])["values"][0])
@@ -468,6 +524,7 @@ class PanelClientes(tk.Frame):
             c = self.gestor.obtener_cliente(id_val)
             acciones = []
             if c.activo:
+                # Solo muestra el botón de desactivar si el cliente está activo
                 acciones.append(("⊘ Desactivar",
                                  lambda: (self.gestor.desactivar_cliente(id_val), self._refrescar()),
                                  WARN))
@@ -476,6 +533,7 @@ class PanelClientes(tk.Frame):
             toast(self.root, str(ex), error=True)
 
     def _construir(self):
+        """Construye todos los widgets del panel."""
         tk.Label(self, text="👤  Clientes", font=F_H1, bg=BG, fg=TEXT).pack(anchor="w", padx=30, pady=(24,4))
         tk.Frame(self, bg=BORDER, height=1).pack(fill="x", padx=30, pady=(0,18))
 
@@ -489,6 +547,7 @@ class PanelClientes(tk.Frame):
         lbl(form, "REGISTRAR CLIENTE", font=("Segoe UI",10,"bold"), fg=ACCENT).pack(anchor="w")
         separador(form)
 
+        # Crea un StyledEntry por cada campo con su placeholder y validador
         self.entries = {}
         campos_val = [
             ("Identificación",  "CC-001",            _val_id),
@@ -517,7 +576,9 @@ class PanelClientes(tk.Frame):
             hacer_tabla(li, "CLIENTES REGISTRADOS", cols, anchos,
                         fn_tooltip=self._info_tooltip)
 
+        # Actualiza el filtro de búsqueda cada vez que el usuario escribe
         self._busq.trace_add("write", lambda *_: self._filtrar())
+        # Un clic copia el ID al portapapeles; doble clic abre el detalle
         self.tree.bind("<ButtonRelease-1>", self._copiar_id)
         self.tree.bind("<Double-1>",        self._abrir_detalle)
 
@@ -527,6 +588,7 @@ class PanelClientes(tk.Frame):
         self._refrescar()
 
     def _registrar(self):
+        """Lee los campos del formulario y llama al gestor para registrar el cliente."""
         e = self.entries
         try:
             self.gestor.registrar_cliente(
@@ -539,9 +601,11 @@ class PanelClientes(tk.Frame):
             toast(self.root, str(ex), error=True)
 
     def _limpiar(self):
+        """Resetea todos los campos del formulario a sus placeholders."""
         for e in self.entries.values(): e.clear()
 
     def _desactivar(self):
+        """Desactiva el cliente seleccionado en la tabla."""
         sel = self.tree.selection()
         if not sel: toast(self.root, "Selecciona un cliente primero", error=True); return
         ident = self.tree.item(sel[0])["values"][0]
@@ -553,6 +617,7 @@ class PanelClientes(tk.Frame):
             toast(self.root, str(ex), error=True)
 
     def _copiar_id(self, event):
+        """Copia el ID de la fila seleccionada al portapapeles del sistema."""
         sel = self.tree.selection()
         if not sel: return
         id_val = str(self.tree.item(sel[0])["values"][0])
@@ -560,17 +625,19 @@ class PanelClientes(tk.Frame):
         toast(self.root, f"📋 ID '{id_val}' copiado al portapapeles")
 
     def _refrescar(self):
+        """Recarga los datos del gestor en la lista interna y actualiza el filtro."""
         self._datos = []
         for c in self.gestor.listar_clientes():
             n = len(self.gestor.listar_reservas(id_cliente=c.identificacion))
             self._datos.append((
                 c.identificacion, c.nombre, c.email,
                 "Activo" if c.activo else "Inactivo",
-                mini_chart(n),   
+                mini_chart(n),  # Barra visual de cantidad de reservas
             ))
         self._filtrar()
 
     def _filtrar(self):
+        """Filtra las filas visibles en el Treeview según el texto de búsqueda."""
         termino = self._busq.get().lower().strip()
         self.tree.delete(*self.tree.get_children())
         for fila in self._datos:
@@ -579,8 +646,10 @@ class PanelClientes(tk.Frame):
         sync_badge(self.tree, self._badge, self._vacio)
 
 
-
 class PanelServicios(tk.Frame):
+    """Panel de la pestaña Servicios: formulario de creación a la izquierda
+    y tabla de servicios registrados a la derecha."""
+
     def __init__(self, parent, gestor: GestorSistema, root):
         super().__init__(parent, bg=BG)
         self.gestor = gestor; self.root = root
@@ -588,7 +657,7 @@ class PanelServicios(tk.Frame):
         self._construir()
 
     def _info_tooltip(self, id_val):
-        """Mejora 8 — info para tooltip de servicios."""
+        """Devuelve un dict con los datos del servicio para el tooltip."""
         try:
             s = self.gestor.obtener_servicio(id_val)
             info = {
@@ -598,6 +667,7 @@ class PanelServicios(tk.Frame):
                 "Tipo":        type(s).__name__.replace("Reserva","Sala").replace("Alquiler","Alquiler"),
                 "Disponible":  "Sí" if s.disponible else "No",
             }
+            # Agrega campos específicos según el tipo concreto de servicio
             if isinstance(s, ReservaSala):
                 info["Capacidad"]  = f"{s.capacidad_max} personas"
                 info["Proyector"]  = "Sí" if s.tiene_proyector else "No"
@@ -611,7 +681,7 @@ class PanelServicios(tk.Frame):
         except: return None
 
     def _abrir_detalle(self, event):
-        """Mejora 9 — ventana de detalle con doble clic."""
+        """Abre VentanaDetalle al hacer doble clic sobre una fila."""
         sel = self.tree.selection()
         if not sel: return
         id_val = str(self.tree.item(sel[0])["values"][0])
@@ -620,6 +690,7 @@ class PanelServicios(tk.Frame):
         VentanaDetalle(self.root, f"Servicio — {id_val}", info)
 
     def _construir(self):
+        """Construye todos los widgets del panel."""
         tk.Label(self, text="🛠️  Servicios", font=F_H1, bg=BG, fg=TEXT).pack(anchor="w", padx=30, pady=(24,4))
         tk.Frame(self, bg=BORDER, height=1).pack(fill="x", padx=30, pady=(0,18))
 
@@ -637,10 +708,10 @@ class PanelServicios(tk.Frame):
         self.combo_tipo = StyledCombo(self.form,
             values=["Sala de reuniones","Alquiler de equipo","Asesoría especializada"], width=26)
         self.combo_tipo.pack(fill="x")
+        # Al cambiar el tipo, se muestran los campos específicos del servicio seleccionado
         self.combo_tipo.bind_select(self._cambiar_tipo)
 
         lbl(self.form, "ID del servicio").pack(anchor="w", pady=(10,2))
-        
         self.e_id = StyledEntry(self.form, "SALA-01", width=26, validador=_val_id)
         self.e_id.pack(fill="x")
 
@@ -652,9 +723,10 @@ class PanelServicios(tk.Frame):
         self.e_precio = StyledEntry(self.form, "80000", width=26, validador=_val_precio)
         self.e_precio.pack(fill="x")
 
+        # Contenedor dinámico donde se insertan los campos extras según el tipo
         self.frame_extra = tk.Frame(self.form, bg=CARD); self.frame_extra.pack(fill="x")
         self._campos_extra = {}
-        self._mostrar_campos_sala()
+        self._mostrar_campos_sala()  # Sala es el tipo por defecto
 
         fila_btn = tk.Frame(self.form, bg=CARD); fila_btn.pack(fill="x", pady=(16,0))
         PillButton(fila_btn, "✓  Crear servicio", self._crear, bg=ACCENT2, w=160).pack(side="left", padx=(0,8))
@@ -676,10 +748,12 @@ class PanelServicios(tk.Frame):
         self._refrescar()
 
     def _limpiar_extra(self):
+        """Elimina los widgets del área de campos extras."""
         for w in self.frame_extra.winfo_children(): w.destroy()
         self._campos_extra = {}
 
     def _mostrar_campos_sala(self):
+        """Muestra los campos específicos para Sala de reuniones."""
         self._limpiar_extra()
         lbl(self.frame_extra, "Capacidad máxima (personas)").pack(anchor="w", pady=(8,2))
         e = StyledEntry(self.frame_extra, "10", width=26); e.pack(fill="x")
@@ -693,6 +767,7 @@ class PanelServicios(tk.Frame):
                        bg=CARD, fg=TEXT, selectcolor=CARD, font=F_BODY, activebackground=CARD).pack(side="left", padx=12)
 
     def _mostrar_campos_equipo(self):
+        """Muestra los campos específicos para Alquiler de equipo."""
         self._limpiar_extra()
         lbl(self.frame_extra, "Tipo / descripción del equipo").pack(anchor="w", pady=(8,2))
         e = StyledEntry(self.frame_extra, "Laptop 16GB RAM", width=26); e.pack(fill="x")
@@ -702,6 +777,7 @@ class PanelServicios(tk.Frame):
         self._campos_extra["stock"] = e2
 
     def _mostrar_campos_asesoria(self):
+        """Muestra los campos específicos para Asesoría especializada."""
         self._limpiar_extra()
         lbl(self.frame_extra, "Especialidad").pack(anchor="w", pady=(8,2))
         e = StyledEntry(self.frame_extra, "Derecho Corporativo", width=26); e.pack(fill="x")
@@ -712,12 +788,15 @@ class PanelServicios(tk.Frame):
         self._campos_extra["nivel"] = c
 
     def _cambiar_tipo(self, _=None):
+        """Actualiza el área de campos extras según el tipo de servicio seleccionado."""
         tipo = self.combo_tipo.get()
         if "Sala" in tipo:     self._mostrar_campos_sala()
         elif "equipo" in tipo: self._mostrar_campos_equipo()
         elif "Asesor" in tipo: self._mostrar_campos_asesoria()
 
     def _crear(self):
+        """Lee los campos del formulario, construye el servicio correspondiente
+        y lo registra en el gestor."""
         tipo = self.combo_tipo.get(); id_s = self.e_id.get(); nombre = self.e_nombre.get()
         try:
             precio = float(self.e_precio.get())
@@ -745,9 +824,11 @@ class PanelServicios(tk.Frame):
             toast(self.root, str(ex), error=True)
 
     def _limpiar(self):
+        """Limpia los campos comunes del formulario."""
         self.e_id.clear(); self.e_nombre.clear(); self.e_precio.clear()
 
     def _copiar_id(self, event):
+        """Copia el ID del servicio seleccionado al portapapeles."""
         sel = self.tree.selection()
         if not sel: return
         id_val = str(self.tree.item(sel[0])["values"][0])
@@ -755,6 +836,7 @@ class PanelServicios(tk.Frame):
         toast(self.root, f"📋 ID '{id_val}' copiado al portapapeles")
 
     def _refrescar(self):
+        """Recarga los servicios del gestor en la lista interna."""
         self._datos = []
         for s in self.gestor.listar_servicios():
             tipo = type(s).__name__.replace("Reserva","Sala").replace("Alquiler","Alq.")
@@ -763,6 +845,7 @@ class PanelServicios(tk.Frame):
         self._filtrar()
 
     def _filtrar(self):
+        """Filtra las filas del Treeview según el texto de búsqueda."""
         termino = self._busq.get().lower().strip()
         self.tree.delete(*self.tree.get_children())
         for fila in self._datos:
@@ -774,8 +857,10 @@ class PanelServicios(tk.Frame):
         self._refrescar()
 
 
-
 class PanelReservas(tk.Frame):
+    """Panel de la pestaña Reservas: formulario de creación a la izquierda
+    y tabla de reservas con acciones de confirmación, completado y cancelación."""
+
     def __init__(self, parent, gestor: GestorSistema, root):
         super().__init__(parent, bg=BG)
         self.gestor = gestor; self.root = root
@@ -783,7 +868,7 @@ class PanelReservas(tk.Frame):
         self._construir()
 
     def _info_tooltip(self, id_val):
-        """Mejora 8 — info para tooltip de reservas."""
+        """Devuelve un dict con los datos de la reserva para el tooltip."""
         try:
             reservas = self.gestor.listar_reservas()
             r = next((r for r in reservas if r.id_reserva == id_val), None)
@@ -802,7 +887,8 @@ class PanelReservas(tk.Frame):
         except: return None
 
     def _abrir_detalle(self, event):
-        """Mejora 9 — ventana de detalle con doble clic y botones de acción."""
+        """Abre VentanaDetalle al hacer doble clic; incluye botones de acción
+        según el estado actual de la reserva."""
         sel = self.tree.selection()
         if not sel: return
         id_val = str(self.tree.item(sel[0])["values"][0])
@@ -813,6 +899,7 @@ class PanelReservas(tk.Frame):
         r = next((r for r in reservas if r.id_reserva == id_val), None)
         if not r: return
 
+        # Construye la lista de acciones disponibles según el estado de la reserva
         acciones = []
         if r.estado == EstadoReserva.PENDIENTE:
             acciones.append(("✓ Confirmar",
@@ -830,6 +917,7 @@ class PanelReservas(tk.Frame):
         VentanaDetalle(self.root, f"Reserva — {id_val}", info, acciones)
 
     def _construir(self):
+        """Construye todos los widgets del panel."""
         tk.Label(self, text="📋  Reservas", font=F_H1, bg=BG, fg=TEXT).pack(anchor="w", padx=30, pady=(24,4))
         tk.Frame(self, bg=BORDER, height=1).pack(fill="x", padx=30, pady=(0,18))
 
@@ -861,6 +949,7 @@ class PanelReservas(tk.Frame):
         lbl(form, "Notas").pack(anchor="w", pady=(8,2))
         self.e_notas = StyledEntry(form, "Opcional", width=26); self.e_notas.pack(fill="x")
 
+        # Checkbox para aplicar o no el IVA al calcular el costo
         self.iva_var = tk.BooleanVar(value=True)
         fila_iva = tk.Frame(form, bg=CARD); fila_iva.pack(anchor="w", pady=(10,0))
         tk.Checkbutton(fila_iva, text="Aplicar IVA (19%)", variable=self.iva_var,
@@ -872,6 +961,7 @@ class PanelReservas(tk.Frame):
         self.e_extra1 = StyledEntry(form, "ej: 5  ó  basico", width=26)
         self.e_extra1.pack(fill="x")
 
+        # Checkboxes para parámetros opcionales específicos de cada tipo de servicio
         self._check_vars = {
             "usar_proyector":  tk.BooleanVar(),
             "seguro":          tk.BooleanVar(),
@@ -898,6 +988,7 @@ class PanelReservas(tk.Frame):
             hacer_tabla(li, "RESERVAS", cols, anchos, altura=10,
                         fn_tooltip=self._info_tooltip)
 
+        # Aplica el color de fondo/texto según el estado de cada reserva
         for estado, cfg in ESTADO_TAG.items():
             self.tree.tag_configure(estado, **cfg)
 
@@ -905,6 +996,7 @@ class PanelReservas(tk.Frame):
         self.tree.bind("<ButtonRelease-1>", self._copiar_id)
         self.tree.bind("<Double-1>",        self._abrir_detalle)
 
+        # Botones de acción rápida bajo la tabla
         acc = tk.Frame(li, bg=CARD); acc.pack(fill="x", padx=12, pady=(0,12))
         for txt, cmd, color in [
             ("✓ Confirmar", self._confirmar, ACCENT2),
@@ -916,6 +1008,7 @@ class PanelReservas(tk.Frame):
         self._refrescar()
 
     def _crear(self):
+        """Lee el formulario, interpreta los parámetros extra y crea la reserva en el gestor."""
         try:
             horas    = float(self.e_horas.get())
             desc_pct = float(self.e_desc.get() or "0")
@@ -923,10 +1016,13 @@ class PanelReservas(tk.Frame):
             extra1   = self.e_extra1.get()
             if extra1:
                 try:
+                    # Si el valor extra es numérico, se pasa como personas y unidades
                     kwargs["num_personas"]      = int(extra1)
                     kwargs["cantidad_unidades"] = int(extra1)
                 except ValueError:
+                    # Si no es numérico, se interpreta como nivel de asesoría
                     kwargs["nivel_override"] = extra1
+            # Agrega solo los checkboxes marcados como True
             for key, var in self._check_vars.items():
                 if var.get(): kwargs[key] = True
             r = self.gestor.crear_reserva(
@@ -940,11 +1036,13 @@ class PanelReservas(tk.Frame):
             toast(self.root, str(ex), error=True)
 
     def _limpiar(self):
+        """Resetea todos los campos del formulario."""
         for e in (self.e_cliente, self.e_servicio, self.e_horas,
                   self.e_desc, self.e_notas, self.e_extra1): e.clear()
         for v in self._check_vars.values(): v.set(False)
 
     def _id_seleccionado(self):
+        """Devuelve el ID de la reserva seleccionada, o None si no hay selección."""
         sel = self.tree.selection()
         if not sel:
             toast(self.root, "Selecciona una reserva primero", error=True)
@@ -952,6 +1050,7 @@ class PanelReservas(tk.Frame):
         return self.tree.item(sel[0])["values"][0]
 
     def _copiar_id(self, event):
+        """Copia el ID de la reserva seleccionada al portapapeles."""
         sel = self.tree.selection()
         if not sel: return
         id_val = str(self.tree.item(sel[0])["values"][0])
@@ -959,6 +1058,7 @@ class PanelReservas(tk.Frame):
         toast(self.root, f"📋 ID '{id_val}' copiado al portapapeles")
 
     def _confirmar(self):
+        """Confirma la reserva seleccionada en la tabla."""
         id_r = self._id_seleccionado()
         if not id_r: return
         try:
@@ -969,6 +1069,7 @@ class PanelReservas(tk.Frame):
             toast(self.root, str(ex), error=True)
 
     def _completar(self):
+        """Marca como completada la reserva seleccionada."""
         id_r = self._id_seleccionado()
         if not id_r: return
         try:
@@ -979,6 +1080,7 @@ class PanelReservas(tk.Frame):
             toast(self.root, str(ex), error=True)
 
     def _cancelar(self):
+        """Cancela la reserva seleccionada, previa confirmación del usuario."""
         id_r = self._id_seleccionado()
         if not id_r: return
         dialogo = ConfirmarDialog(
@@ -996,6 +1098,7 @@ class PanelReservas(tk.Frame):
             toast(self.root, str(ex), error=True)
 
     def _refrescar(self):
+        """Recarga las reservas del gestor en la lista interna."""
         self._datos = []
         for r in self.gestor.listar_reservas():
             self._datos.append((
@@ -1006,26 +1109,29 @@ class PanelReservas(tk.Frame):
         self._filtrar()
 
     def _filtrar(self):
+        """Filtra las reservas visibles y aplica el tag de color según el estado."""
         termino = self._busq.get().lower().strip()
         self.tree.delete(*self.tree.get_children())
         for fila in self._datos:
             if termino and not any(termino in str(v).lower() for v in fila): continue
-            self.tree.insert("", "end", values=fila, tags=(fila[5],))
+            self.tree.insert("", "end", values=fila, tags=(fila[5],))  # fila[5] = estado
         sync_badge(self.tree, self._badge, self._vacio)
 
     def refrescar_publico(self):
         self._refrescar()
 
 
-
-
 class PanelReporte(tk.Frame):
+    """Panel de la pestaña Reporte: muestra KPIs, desglose por estado,
+    gráfica de barras animada y botón de exportación a .txt."""
+
     def __init__(self, parent, gestor: GestorSistema, root):
         super().__init__(parent, bg=BG)
         self.gestor = gestor; self.root = root
         self._construir()
 
     def _construir(self):
+        """Crea el contenedor principal y carga el reporte por primera vez."""
         tk.Label(self, text="📊  Reporte General", font=F_H1, bg=BG, fg=TEXT).pack(anchor="w", padx=30, pady=(24,4))
         tk.Frame(self, bg=BORDER, height=1).pack(fill="x", padx=30, pady=(0,20))
         self.contenedor = tk.Frame(self, bg=BG)
@@ -1033,20 +1139,23 @@ class PanelReporte(tk.Frame):
         self._refrescar()
 
     def _refrescar(self):
+        """Destruye el contenido anterior y reconstruye el reporte con datos actuales."""
         for w in self.contenedor.winfo_children(): w.destroy()
 
         clientes  = self.gestor.listar_clientes()
         servicios = self.gestor.listar_servicios()
         reservas  = self.gestor.listar_reservas()
 
+        # Contadores por estado
         confirmadas = sum(1 for r in reservas if r.estado == EstadoReserva.CONFIRMADA)
         completadas = sum(1 for r in reservas if r.estado == EstadoReserva.COMPLETADA)
         canceladas  = sum(1 for r in reservas if r.estado == EstadoReserva.CANCELADA)
         pendientes  = sum(1 for r in reservas if r.estado == EstadoReserva.PENDIENTE)
+        # Solo suma ingresos de reservas activas (confirmadas o completadas)
         ingresos    = sum(r.costo for r in reservas
                          if r.estado in (EstadoReserva.CONFIRMADA, EstadoReserva.COMPLETADA))
 
-       
+        # Tarjetas KPI en la parte superior
         kpis = tk.Frame(self.contenedor, bg=BG); kpis.pack(fill="x", pady=(0,16))
         for titulo, valor, color in [
             ("👤 Clientes",  str(len(clientes)),  ACCENT),
@@ -1060,7 +1169,7 @@ class PanelReporte(tk.Frame):
             tk.Label(inner, text=titulo, font=F_SM, bg=CARD, fg=TEXT_DIM).pack(anchor="w")
             tk.Label(inner, text=valor, font=("Segoe UI",22,"bold"), bg=CARD, fg=color).pack(anchor="w")
 
-        
+        # Desglose numérico de reservas por estado
         det_wrap = tk.Frame(self.contenedor, bg=BORDER, padx=1, pady=1)
         det_wrap.pack(fill="x", pady=(0,12))
         det = tk.Frame(det_wrap, bg=CARD, padx=24, pady=16); det.pack(fill="both")
@@ -1080,7 +1189,7 @@ class PanelReporte(tk.Frame):
                      bg=CARD, fg=color).pack()
             tk.Label(bloque, text=estado, font=F_SM, bg=CARD, fg=TEXT_DIM).pack()
 
-        
+        # Gráfica de barras horizontal animada
         datos_grafica = [
             ("Pendientes",  pendientes,  AMBER),
             ("Confirmadas", confirmadas, ACCENT2),
@@ -1089,12 +1198,13 @@ class PanelReporte(tk.Frame):
         ]
         self._dibujar_grafica(self.contenedor, datos_grafica)
 
-        
+        # Botones de actualización y exportación
         fila_btns = tk.Frame(self.contenedor, bg=BG); fila_btns.pack(pady=(8,0))
         PillButton(fila_btns, "↻  Actualizar", self._refrescar, bg="#444c56", w=150).pack(side="left", padx=(0,10))
         PillButton(fila_btns, "📄  Exportar .txt", self._exportar, bg=ACCENT, w=160).pack(side="left")
 
     def _dibujar_grafica(self, parent, datos):
+        """Dibuja una gráfica de barras horizontales con animación de aparición."""
         if not any(v for _, v, _ in datos): return
         maximo = max(v for _, v, _ in datos) or 1
 
@@ -1111,6 +1221,7 @@ class PanelReporte(tk.Frame):
         canvas.update_idletasks()
 
         def animar(prog):
+            # Redibuja cada barra con un ancho proporcional a prog (de 0.0 a 1.0)
             canvas.delete("all")
             cw_px = canvas.winfo_width()
             if cw_px < 20: cw_px = 440
@@ -1120,8 +1231,10 @@ class PanelReporte(tk.Frame):
                 y = i * 42 + 6
                 h = 26
                 ancho = int(barra_w * (valor / maximo) * prog)
+                # Fondo de la barra
                 canvas.create_rectangle(lbl_w, y, lbl_w + barra_w, y + h,
                                         fill="#1e2736", outline="")
+                # Barra coloreada proporcional al valor
                 if ancho > 0:
                     canvas.create_rectangle(lbl_w, y, lbl_w + ancho, y + h,
                                             fill=color, outline="")
@@ -1136,6 +1249,7 @@ class PanelReporte(tk.Frame):
         canvas.after(180, lambda: animar(0.0))
 
     def _exportar(self):
+        """Genera un archivo .txt con el reporte completo en la misma carpeta del script."""
         try:
             clientes  = self.gestor.listar_clientes()
             servicios = self.gestor.listar_servicios()
@@ -1202,8 +1316,10 @@ class PanelReporte(tk.Frame):
         self._refrescar()
 
 
-
 class App(tk.Tk):
+    """Ventana principal de la aplicación. Contiene el sidebar de navegación
+    y el área de contenido donde se muestran los paneles."""
+
     def __init__(self, gestor=None):
         super().__init__()
         self.title("Software FJ — Sistema de Gestión")
@@ -1211,41 +1327,44 @@ class App(tk.Tk):
         self.minsize(1000, 640)
         self.configure(bg=BG)
         self.resizable(True, True)
-        self.gestor    = gestor or GestorSistema()
-        self._panels   = {}
-        self._nav_btns = {}
-        self._actual   = None
+        self.gestor    = gestor or GestorSistema()  # Usa un gestor existente o crea uno nuevo
+        self._panels   = {}     # Diccionario de paneles por nombre de pestaña
+        self._nav_btns = {}     # Diccionario de botones de navegación
+        self._actual   = None   # Nombre del panel actualmente visible
         self._set_icono()
         self._construir_layout()
-        self._mostrar("clientes")
+        self._mostrar("clientes")  # Pestaña inicial al abrir la app
 
     def _set_icono(self):
+        """Genera y aplica un ícono PNG con las letras F y J directamente en código,
+        sin depender de archivos externos."""
         try:
             import struct, zlib, tempfile
 
             def _png_fj(tam=32):
-                az = (9, 105, 218, 255)   # #0969da
-                bl = (255, 255, 255, 255) # blanco
+                az = (9, 105, 218, 255)   # Color azul (#0969da)
+                bl = (255, 255, 255, 255) # Blanco
 
                 pixels = [[az]*tam for _ in range(tam)]
 
                 def rect(x0, y0, x1, y1):
+                    # Pinta un rectángulo de píxeles blancos en la cuadrícula
                     for y in range(y0, y1):
                         for x in range(x0, x1):
                             if 0<=x<tam and 0<=y<tam:
                                 pixels[y][x] = bl
 
                 # Letra F
-                rect(5, 5, 8, 27)   # vertical
+                rect(5, 5, 8, 27)   # trazo vertical
                 rect(5, 5, 16, 8)   # barra superior
                 rect(5, 14, 14, 17) # barra media
 
                 # Letra J
                 rect(18, 5, 27, 8)  # barra superior
-                rect(23, 5, 26, 24) # vertical
+                rect(23, 5, 26, 24) # trazo vertical
                 rect(16, 21, 24, 24)# curva inferior
 
-                # Construir PNG
+                # Construye el archivo PNG binario manualmente (sin librerías externas)
                 def chunk(name, data):
                     c = name + data
                     return struct.pack('>I', len(data)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
@@ -1264,15 +1383,16 @@ class App(tk.Tk):
 
             png_data = _png_fj(32)
             img = tk.PhotoImage(data=png_data)
-            self._icono = img
+            self._icono = img  # Guarda referencia para evitar que el GC lo elimine
             self.iconphoto(True, img)
         except Exception:
-            pass
+            pass  # Si falla, simplemente no se muestra ícono
 
     def _construir_layout(self):
+        """Construye el sidebar izquierdo y el área de contenido derecha."""
         sidebar = tk.Frame(self, bg=PANEL, width=190)
         sidebar.pack(side="left", fill="y")
-        sidebar.pack_propagate(False)
+        sidebar.pack_propagate(False)  # Evita que el contenido redimensione el sidebar
 
         tk.Label(sidebar, text="Software FJ", font=("Segoe UI",14,"bold"),
                  bg=PANEL, fg=TEXT).pack(pady=(28,4), padx=20, anchor="w")
@@ -1280,6 +1400,7 @@ class App(tk.Tk):
                  bg=PANEL, fg=TEXT_DIM).pack(padx=20, anchor="w")
         tk.Frame(sidebar, bg=BORDER, height=1).pack(fill="x", padx=14, pady=18)
 
+        # Crea un botón de navegación por cada pestaña
         for texto, key in [
             ("👤  Clientes",  "clientes"),
             ("🛠️   Servicios", "servicios"),
@@ -1290,12 +1411,12 @@ class App(tk.Tk):
             btn.pack(fill="x", padx=10, pady=3)
             self._nav_btns[key] = btn
 
-       
+        # Espaciador flexible que empuja el reloj y el botón de tema hacia abajo
         tk.Frame(sidebar, bg=PANEL).pack(expand=True)
 
         tk.Frame(sidebar, bg=BORDER, height=1).pack(fill="x", padx=14)
 
-        # Reloj y fecha
+        # Reloj y fecha actualizados cada segundo
         self._lbl_hora = tk.Label(sidebar, text="", font=("Consolas", 18, "bold"),
                                    bg=PANEL, fg=ACCENT)
         self._lbl_hora.pack(pady=(14, 2))
@@ -1306,7 +1427,7 @@ class App(tk.Tk):
 
         tk.Frame(sidebar, bg=BORDER, height=1).pack(fill="x", padx=14)
 
-        # Botón modo claro/oscuro al fondo
+        # Botón para alternar entre modo oscuro y claro
         icono = "☀  Modo claro" if _MODO_ACTUAL == "oscuro" else "🌙  Modo oscuro"
         btn_color = "#2d3748" if _MODO_ACTUAL == "oscuro" else "#d0d7de"
         btn_fg    = TEXT
@@ -1314,21 +1435,25 @@ class App(tk.Tk):
                                     bg=btn_color, fg=btn_fg, w=190, h=36, font=F_SM)
         self._btn_tema.pack(fill="x")
 
+        # Área donde se muestran los paneles
         self.content = tk.Frame(self, bg=BG)
         self.content.pack(side="left", fill="both", expand=True)
 
+        # Instancia todos los paneles (solo uno estará visible a la vez)
         self._panels["clientes"]  = PanelClientes(self.content, self.gestor, self)
         self._panels["servicios"] = PanelServicios(self.content, self.gestor, self)
         self._panels["reservas"]  = PanelReservas(self.content, self.gestor, self)
         self._panels["reporte"]   = PanelReporte(self.content, self.gestor, self)
 
     def _tick(self):
+        """Actualiza la hora y fecha en el sidebar cada 1000ms."""
         ahora = datetime.now()
         self._lbl_hora.config(text=ahora.strftime("%H:%M:%S"))
         self._lbl_fecha.config(text=ahora.strftime("%d %b %Y"))
         self.after(1000, self._tick)
 
     def _nav_btn(self, parent, texto, key):
+        """Crea un botón de navegación con indicador lateral de selección activa."""
         frm = tk.Frame(parent, bg=PANEL, cursor="hand2", height=38)
         frm.pack_propagate(False)
         inner = tk.Frame(frm, bg=PANEL, cursor="hand2")
@@ -1336,14 +1461,17 @@ class App(tk.Tk):
         lbl_ = tk.Label(inner, text=texto, font=F_BODY, bg=PANEL,
                         fg=TEXT_DIM, anchor="w", padx=14, cursor="hand2")
         lbl_.place(relx=0, rely=0, relwidth=1, relheight=1)
+        # Barra vertical de 3px que indica la pestaña activa
         indicator = tk.Frame(inner, bg=PANEL, width=3)
         indicator.place(relx=0, rely=0, relheight=1)
 
         def activar():
+            # Resalta el botón y muestra la barra indicadora
             inner.config(bg=NAV_HOV); lbl_.config(bg=NAV_HOV, fg=TEXT)
             indicator.config(bg=ACCENT)
 
         def desactivar():
+            # Restaura el aspecto inactivo
             inner.config(bg=PANEL); lbl_.config(bg=PANEL, fg=TEXT_DIM)
             indicator.config(bg=PANEL)
 
@@ -1364,6 +1492,7 @@ class App(tk.Tk):
         _cargar_tema(nuevo)
         gestor = self.gestor
         panel_actual = self._actual or "clientes"
+        # Destruye todos los widgets y reconstruye con los nuevos colores
         for w in self.winfo_children(): w.destroy()
         self._panels = {}; self._nav_btns = {}; self._actual = None
         self.configure(bg=BG)
@@ -1372,6 +1501,7 @@ class App(tk.Tk):
         self._mostrar(panel_actual)
 
     def _mostrar(self, key: str):
+        """Oculta el panel actual y muestra el panel correspondiente a key."""
         if self._actual and self._actual in self._nav_btns:
             self._nav_btns[self._actual]._desactivar()
         if self._actual:
@@ -1380,16 +1510,17 @@ class App(tk.Tk):
         self._nav_btns[key]._activar()
         self._actual = key
         panel = self._panels[key]
+        # Si el panel expone refrescar_publico, lo llama al entrar para mostrar datos actualizados
         if hasattr(panel, "refrescar_publico"):
             panel.refrescar_publico()
 
         self._fade_in()
 
     def _fade_in(self):
-        """Simula fade-in con overlay Canvas usando stipple decreciente."""
+        """Simula un efecto fade-in con un Canvas superpuesto usando stipple decreciente."""
         ov = tk.Canvas(self.content, bg=BG, highlightthickness=0)
         ov.place(x=0, y=0, relwidth=1, relheight=1)
-        pasos = ["gray75", "gray50", "gray25", "gray12"]
+        pasos = ["gray75", "gray50", "gray25", "gray12"]  # De más opaco a más transparente
 
         def step(i):
             if i >= len(pasos):
@@ -1411,6 +1542,9 @@ class App(tk.Tk):
 # SPLASH SCREEN
 
 class SplashScreen(tk.Tk):
+    """Pantalla de carga que se muestra antes de abrir la App.
+    Muestra una barra de progreso animada y mensajes de estado."""
+
     _BG     = "#f6f8fa"
     _BORDER = "#d0d7de"
     _ACCENT = "#0969da"
@@ -1418,6 +1552,7 @@ class SplashScreen(tk.Tk):
     _DIM    = "#57606a"
     _VER    = "#6e7781"
 
+    # Pasos de la barra de progreso: (porcentaje, mensaje)
     PASOS = [
         (10,  "Iniciando sistema..."),
         (30,  "Cargando módulos..."),
@@ -1429,10 +1564,11 @@ class SplashScreen(tk.Tk):
 
     def __init__(self):
         super().__init__()
-        self.overrideredirect(True)
+        self.overrideredirect(True)   # Quita la barra de título del sistema operativo
         self.configure(bg=self._BG)
         self.attributes("-topmost", True)
         ancho, alto = 380, 420
+        # Centra la ventana en la pantalla
         x = (self.winfo_screenwidth()  - ancho) // 2
         y = (self.winfo_screenheight() - alto)  // 2
         self.geometry(f"{ancho}x{alto}+{x}+{y}")
@@ -1443,6 +1579,8 @@ class SplashScreen(tk.Tk):
         self.mainloop()
 
     def _cargar_imagen(self, ancho_px, alto_px):
+        """Intenta cargar la imagen del splash desde rutas predefinidas.
+        Primero intenta con Pillow; si no está instalada, usa tk.PhotoImage."""
         rutas = [
             r"C:\Users\Usuario\OneDrive\Documentos\Tarea numero 4 programacion\imagen splash.png",
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "imagen splash.png"),
@@ -1456,7 +1594,7 @@ class SplashScreen(tk.Tk):
             img = Image.open(ruta).resize((ancho_px, alto_px), Image.LANCZOS)
             return ImageTk.PhotoImage(img)
         except ImportError:
-            pass
+            pass  # Pillow no instalada, se intenta con tk.PhotoImage
         except Exception:
             return None
         try:
@@ -1467,6 +1605,7 @@ class SplashScreen(tk.Tk):
             return None
 
     def _construir(self):
+        """Construye todos los widgets de la pantalla splash."""
         borde = tk.Frame(self, bg=self._ACCENT, padx=2, pady=2)
         borde.pack(fill="both", expand=True)
         contenedor = tk.Frame(borde, bg=self._BG)
@@ -1479,6 +1618,7 @@ class SplashScreen(tk.Tk):
         if self._foto:
             tk.Label(zona_img, image=self._foto, bg=self._BG, bd=0).pack()
         else:
+            # Si no hay imagen, dibuja el logo animado en un Canvas
             self._logo_canvas = tk.Canvas(zona_img, width=90, height=90,
                                            bg=self._BG, highlightthickness=0)
             self._logo_canvas.pack()
@@ -1494,6 +1634,7 @@ class SplashScreen(tk.Tk):
                  font=("Segoe UI", 9),
                  bg=self._BG, fg=self._DIM).pack(pady=(2, 8))
 
+        # Chips decorativos que indican tecnologías usadas
         chips = tk.Frame(body, bg=self._BG); chips.pack(pady=(0, 14))
         for txt, color in [("Python 3", self._ACCENT), ("OOP", self._ACCT2), ("Sin BD", "#9a6700")]:
             c = tk.Frame(chips, bg=color); c.pack(side="left", padx=4)
@@ -1502,11 +1643,13 @@ class SplashScreen(tk.Tk):
 
         tk.Frame(body, bg=self._BORDER, height=1).pack(fill="x", pady=(0, 10))
 
+        # Etiqueta que muestra el mensaje del paso actual
         self._lbl_estado = tk.Label(body, text="Iniciando...",
                                     font=("Segoe UI", 8),
                                     bg=self._BG, fg=self._DIM, anchor="w")
         self._lbl_estado.pack(fill="x")
 
+        # Barra de progreso: fondo gris + barra azul que crece
         self._barra_bg = tk.Frame(body, bg=self._BORDER, height=5)
         self._barra_bg.pack(fill="x", pady=(5, 0))
         self._barra_bg.pack_propagate(False)
@@ -1518,6 +1661,8 @@ class SplashScreen(tk.Tk):
                  bg=self._BG, fg=self._VER).pack(side="bottom", anchor="e")
 
     def _dibujar_logo(self, progreso):
+        """Dibuja el logo circular con las letras F y J en el Canvas,
+        con un arco de progreso proporcional al valor recibido."""
         c = self._logo_canvas; c.delete("all")
         cx, cy, r = 27, 27, 24
         c.create_oval(cx-r, cy-r, cx+r, cy+r, fill="#cce5ff", outline=self._BORDER)
@@ -1533,20 +1678,25 @@ class SplashScreen(tk.Tk):
                       fill=self._ACCT2, anchor="center")
 
     def _animar_logo(self):
+        """Llama a _dibujar_logo repetidamente para animar el arco del logo."""
         self._dibujar_logo(self._progreso)
         if self._progreso < 100:
             self.after(60, self._animar_logo)
 
     def _ejecutar_paso(self):
+        """Avanza al siguiente paso de la barra, actualiza el mensaje y destruye
+        la ventana cuando todos los pasos terminan."""
         if self._paso_idx >= len(self.PASOS):
             self.after(400, self.destroy); return
         objetivo, mensaje = self.PASOS[self._paso_idx]
         self._lbl_estado.config(text=mensaje)
         self._animar_barra(self._progreso, objetivo)
         self._progreso = objetivo; self._paso_idx += 1
+        # Pasos iniciales más rápidos; los últimos con más pausa para sensación de carga
         self.after(260 if self._paso_idx <= 3 else 420, self._ejecutar_paso)
 
     def _animar_barra(self, desde, hasta, pasos=14):
+        """Anima suavemente la barra de progreso interpolando entre desde y hasta."""
         def step(actual, n):
             if n <= 0:
                 self._set_barra(hasta); return
@@ -1556,12 +1706,12 @@ class SplashScreen(tk.Tk):
         step(desde, pasos)
 
     def _set_barra(self, pct):
+        """Ajusta el ancho de la barra azul al porcentaje indicado."""
         self.update_idletasks()
         total = self._barra_bg.winfo_width()
         self._barra.place(x=0, y=0, relheight=1, width=int(total * pct / 100))
 
 
-
 if __name__ == "__main__":
-    SplashScreen()
+    SplashScreen()   # Muestra la pantalla de carga; al cerrarse lanza la app principal
     App().mainloop()
