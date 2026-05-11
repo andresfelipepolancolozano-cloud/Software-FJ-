@@ -24,8 +24,8 @@ class Cliente(Entidad):
     - Polimorfismo : implementa describir(), resumen() y validar().
     """
 
-    # Patrones de validación
-    _RE_EMAIL   = re.compile(r"^[\w\.\+\-]+@[\w\-]+\.[a-zA-Z]{2,}$")
+    # Expresiones regulares reutilizables para validar los campos del cliente
+    _RE_EMAIL    = re.compile(r"^[\w\.\+\-]+@[\w\-]+\.[a-zA-Z]{2,}$")
     _RE_TELEFONO = re.compile(r"^\+?[\d\s\-\(\)]{7,20}$")
     _RE_ID       = re.compile(r"^[A-Za-z0-9\-]{3,20}$")
 
@@ -48,23 +48,25 @@ class Cliente(Entidad):
         """
         super().__init__(identificacion)
 
-        # Validar antes de asignar (lanza excepción si falla)
+        # Se valida cada campo antes de asignarlo; si alguno falla lanza DatoClienteInvalidoError
         self._validar_identificacion(identificacion)
         self._validar_nombre(nombre)
         self._validar_email(email)
         self._validar_telefono(telefono)
 
-        self.__identificacion: str = identificacion.strip()
-        self.__nombre: str         = nombre.strip()
-        self.__email: str          = email.strip().lower()
-        self.__telefono: str       = telefono.strip()
-        self.__empresa: str        = empresa.strip()
-        self.__activo: bool        = True
-        self.__historial_reservas: list = []
+        # Atributos privados — solo accesibles a través de las propiedades
+        self.__identificacion: str      = identificacion.strip()
+        self.__nombre: str              = nombre.strip()
+        self.__email: str               = email.strip().lower()
+        self.__telefono: str            = telefono.strip()
+        self.__empresa: str             = empresa.strip()
+        self.__activo: bool             = True   # Todo cliente inicia como activo
+        self.__historial_reservas: list = []     # IDs de reservas asociadas al cliente
 
         log.info("Cliente", f"Cliente creado: {self.__nombre} ({self.__identificacion})")
 
-    # ── Validaciones estáticas ────────────────────────────────────────────
+    # Validaciones estáticas — se pueden llamar sin instanciar la clase
+
     @staticmethod
     def _validar_identificacion(valor: str):
         if not valor or not isinstance(valor, str):
@@ -94,7 +96,8 @@ class Cliente(Entidad):
         if not Cliente._RE_TELEFONO.match(valor.strip()):
             raise DatoClienteInvalidoError("telefono", valor, "formato de teléfono inválido")
 
-    # ── Propiedades ───────────────────────────────────────────────────────
+    # Propiedades — getters de solo lectura; los setters validan antes de asignar
+
     @property
     def identificacion(self) -> str:
         return self.__identificacion
@@ -105,6 +108,7 @@ class Cliente(Entidad):
 
     @nombre.setter
     def nombre(self, valor: str):
+        # Valida el nuevo nombre antes de reemplazar el actual
         self._validar_nombre(valor)
         self.__nombre = valor.strip()
         log.info("Cliente", f"Nombre actualizado para {self.__identificacion}: {self.__nombre}")
@@ -137,26 +141,30 @@ class Cliente(Entidad):
 
     @property
     def historial_reservas(self) -> list:
-        """Copia de solo lectura del historial."""
+        # Devuelve una copia para que nadie pueda modificar la lista interna directamente
         return list(self.__historial_reservas)
 
-    # ── Métodos de negocio ────────────────────────────────────────────────
+    # Métodos de negocio
+
     def desactivar(self):
-        """Marca al cliente como inactivo (no se puede reservar)."""
+        """Marca al cliente como inactivo; no podrá hacer nuevas reservas."""
         self.__activo = False
         log.advertencia("Cliente", f"Cliente desactivado: {self.__nombre} ({self.__identificacion})")
 
     def activar(self):
+        """Reactiva un cliente previamente desactivado."""
         self.__activo = True
         log.info("Cliente", f"Cliente reactivado: {self.__nombre} ({self.__identificacion})")
 
     def agregar_reserva(self, id_reserva: str):
-        """Registra internamente el ID de una reserva asociada."""
+        """Registra el ID de una reserva en el historial interno del cliente."""
         if id_reserva not in self.__historial_reservas:
             self.__historial_reservas.append(id_reserva)
 
-    # ── Contrato Entidad ──────────────────────────────────────────────────
+    # Implementación del contrato de Entidad
+
     def describir(self) -> str:
+        # Descripción completa con todos los datos del cliente
         estado = "Activo" if self.__activo else "Inactivo"
         empresa = f" | Empresa: {self.__empresa}" if self.__empresa else ""
         return (
@@ -169,9 +177,11 @@ class Cliente(Entidad):
         )
 
     def resumen(self) -> str:
+        # Una sola línea con la información mínima de identificación
         return f"Cliente({self.__identificacion}) — {self.__nombre}"
 
     def validar(self) -> bool:
+        # Revalida todos los campos para confirmar que el objeto sigue siendo consistente
         try:
             self._validar_identificacion(self.__identificacion)
             self._validar_nombre(self.__nombre)
